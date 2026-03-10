@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AIエージェント - ワークフロービルダー</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#4f46e5', // Indigo 600
+                        secondary: '#10b981', // Emerald 500
+                        bg_canvas: '#f8fafc',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background-color: #f1f5f9;
+        }
+        
+        /* キャンバスの背景パターン */
+        .canvas-bg {
+            background-color: #f8fafc;
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+
+        /* ノードのスタイル */
+        .node-card {
+            position: absolute;
+            z-index: 10;
+            transition: box-shadow 0.2s, transform 0.1s;
+        }
+        .node-card:hover {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            z-index: 20;
+        }
+        .node-card.dragging {
+            opacity: 0.9;
+            transform: scale(1.02);
+            z-index: 50;
+        }
+
+        /* ポート（接続口） モバイルでタップしやすいよう少し拡大 */
+        .port {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            border: 2px solid white;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
+            z-index: 30;
+            transition: transform 0.1s;
+        }
+        .port:hover {
+            transform: translateY(-50%) scale(1.3);
+        }
+        .port-in {
+            left: -9px;
+            background-color: #3b82f6;
+            cursor: crosshair;
+        }
+        .port-out {
+            right: -9px;
+            background-color: #10b981;
+            cursor: crosshair;
+        }
+
+        /* カスタムスクロールバー */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        /* モバイルツールバー用のスクロールバー非表示 */
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* SVGの線 */
+        .connection-line {
+            fill: none;
+            stroke: #94a3b8;
+            stroke-width: 4; /* モバイルの視認性向上 */
+            stroke-linecap: round;
+            transition: stroke 0.3s;
+        }
+        .connection-line:hover {
+            stroke: #ef4444; /* ホバーで赤色（削除のヒント） */
+            cursor: pointer;
+        }
+        .connection-line.executing {
+            stroke: #3b82f6;
+            stroke-dasharray: 10;
+            animation: dash 1s linear infinite;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: -20; }
+        }
+
+        /* モバイル用のノード幅調整 */
+        @media (max-width: 767px) {
+            .node-card {
+                width: 240px;
+            }
+        }
+    </style>
+</head>
+<body class="flex flex-col text-slate-800 font-sans">
+
+    <!-- ヘッダー (レスポンシブ調整) -->
+    <header class="bg-white border-b border-slate-200 h-14 md:h-16 flex items-center justify-between px-3 md:px-6 shrink-0 shadow-sm z-30">
+        <div class="flex items-center gap-1 md:gap-2">
+            <div class="bg-primary text-white p-1.5 md:p-2 rounded-lg">
+                <i data-lucide="bot" class="w-5 h-5 md:w-6 md:h-6"></i>
+            </div>
+            <h1 class="text-base md:text-xl font-bold text-slate-800 tracking-tight">AIエージェント</h1>
+            <span class="hidden md:inline-block ml-2 px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded font-medium border border-slate-200">ワークフロービルダー</span>
+        </div>
+        <div class="flex gap-2 md:gap-3">
+            <button onclick="clearCanvas()" class="px-2 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-md transition flex items-center gap-1 md:gap-2">
+                <i data-lucide="trash-2" class="w-4 h-4"></i> <span class="hidden md:inline">クリア</span>
+            </button>
+            <button onclick="testWorkflow()" class="px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium bg-primary hover:bg-indigo-700 text-white rounded-md shadow-sm transition flex items-center gap-1 md:gap-2">
+                <i data-lucide="play" class="w-4 h-4"></i> <span class="hidden md:inline">テスト実行</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- モバイル用タブナビゲーション -->
+    <div class="md:hidden flex bg-white border-b border-slate-200 shrink-0 z-20">
+        <button id="tab-editor" onclick="switchTab('editor')" class="flex-1 py-3 text-sm font-semibold border-b-2 border-primary text-primary transition-colors">ワークフロー</button>
+        <button id="tab-chat" onclick="switchTab('chat')" class="flex-1 py-3 text-sm font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">チャット</button>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <main class="flex-1 flex overflow-hidden flex-col md:flex-row">
+        
+        <!-- 左ペイン：ワークフローエディタ -->
+        <section id="pane-editor" class="flex-1 flex flex-col relative md:border-r border-slate-200 w-full md:w-auto shrink-0 transition-transform">
+            <!-- ツールバー (横スクロール対応) -->
+            <div class="h-14 bg-white border-b border-slate-200 flex items-center px-3 md:px-4 gap-2 md:gap-3 z-20 shadow-sm overflow-x-auto scrollbar-hide">
+                <span class="hidden md:inline text-xs font-semibold text-slate-500 mr-2 uppercase tracking-wider shrink-0">ノード追加:</span>
+                <button onclick="addNode('input')" class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-xs md:text-sm font-medium transition">
+                    <i data-lucide="message-square" class="w-4 h-4"></i> ユーザー入力
+                </button>
+                <button onclick="addNode('ai')" class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded text-xs md:text-sm font-medium transition">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i> AI処理 (Gemini)
+                </button>
+                <button onclick="addNode('output')" class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded text-xs md:text-sm font-medium transition">
+                    <i data-lucide="monitor-stop" class="w-4 h-4"></i> 出力表示
+                </button>
+            </div>
+
+            <!-- キャンバスエリア -->
+            <div id="canvas-container" class="flex-1 overflow-auto relative canvas-bg">
+                <!-- 実キャンバス領域 (十分な広さを確保) -->
+                <div id="canvas" class="relative w-[3000px] h-[3000px]">
+                    <!-- 結線用SVGレイヤー -->
+                    <svg id="edges-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none z-0"></svg>
+                    <!-- 一時的な結線用SVG (ドラッグ中) -->
+                    <svg id="temp-edge-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none z-40">
+                        <path id="temp-edge" class="connection-line" style="stroke-dasharray: 5; opacity: 0.6; display: none;"></path>
+                    </svg>
+                    
+                    <!-- ノード要素がここに追加される -->
+                    <div id="nodes-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none z-10"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 右ペイン：チャットUI -->
+        <section id="pane-chat" class="w-full md:w-96 bg-white flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-20 hidden md:flex shrink-0">
+            <div class="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                <h2 class="font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="message-circle" class="w-5 h-5 text-primary"></i> プレビュー・チャット
+                </h2>
+            </div>
+            
+            <!-- メッセージ表示エリア -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 flex flex-col gap-4 bg-white">
+                <div class="flex flex-col text-center text-slate-400 my-8">
+                    <i data-lucide="bot" class="w-12 h-12 mx-auto mb-2 opacity-50"></i>
+                    <p class="text-sm">ワークフローを作成し、<br>下の入力欄から話しかけてください。</p>
+                </div>
+            </div>
+            
+            <!-- 入力エリア -->
+            <div class="p-3 md:p-4 border-t border-slate-100 bg-white">
+                <form id="chat-form" onsubmit="handleChatSubmit(event)" class="relative">
+                    <textarea 
+                        id="chat-input" 
+                        rows="2" 
+                        class="w-full pl-3 pr-12 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary resize-none text-sm"
+                        placeholder="エージェントへのメッセージ..."
+                        onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleChatSubmit(event); }"
+                    ></textarea>
+                    <button type="submit" class="absolute right-2 bottom-2 p-1.5 bg-primary text-white rounded-md hover:bg-indigo-700 transition">
+                        <i data-lucide="send" class="w-4 h-4"></i>
+                    </button>
+                </form>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // --- 設定・グローバル変数 ---
+        const WORKER_URL = 'https://green-credit-a6fb.ikymbiz.workers.dev';
+        
+        let nodes = [];
+        let edges = [];
+        let isDraggingNode = false;
+        let draggedNodeId = null;
+        let dragOffset = { x: 0, y: 0 };
+        
+        let isConnecting = false;
+        let connectionStartPort = null; // { nodeId, type: 'out' }
+
+        const canvas = document.getElementById('canvas');
+        const nodesLayer = document.getElementById('nodes-layer');
+        const edgesLayer = document.getElementById('edges-layer');
+        const tempEdgePath = document.getElementById('temp-edge');
+        const chatMessages = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+
+        // タッチ＆マウスイベント共通位置取得
+        function getEventPos(e) {
+            if (e.touches && e.touches.length > 0) {
+                return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }
+            if (e.changedTouches && e.changedTouches.length > 0) {
+                return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+            }
+            return { x: e.clientX, y: e.clientY };
+        }
+
+        // --- タブ切り替え制御（モバイル用） ---
+        let activeTab = 'editor';
+        function switchTab(tab) {
+            activeTab = tab;
+            const paneEditor = document.getElementById('pane-editor');
+            const paneChat = document.getElementById('pane-chat');
+            const tabEditor = document.getElementById('tab-editor');
+            const tabChat = document.getElementById('tab-chat');
+
+            if (window.innerWidth < 768) {
+                if (tab === 'editor') {
+                    paneEditor.style.display = 'flex';
+                    paneChat.style.display = 'none';
+                } else {
+                    paneEditor.style.display = 'none';
+                    paneChat.style.display = 'flex';
+                }
+            }
+
+            if (tab === 'editor') {
+                tabEditor.classList.add('border-primary', 'text-primary');
+                tabEditor.classList.remove('border-transparent', 'text-slate-500');
+                tabChat.classList.remove('border-primary', 'text-primary');
+                tabChat.classList.add('border-transparent', 'text-slate-500');
+            } else {
+                tabChat.classList.add('border-primary', 'text-primary');
+                tabChat.classList.remove('border-transparent', 'text-slate-500');
+                tabEditor.classList.remove('border-primary', 'text-primary');
+                tabEditor.classList.add('border-transparent', 'text-slate-500');
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            const paneEditor = document.getElementById('pane-editor');
+            const paneChat = document.getElementById('pane-chat');
+            if (window.innerWidth >= 768) {
+                paneEditor.style.display = '';
+                paneChat.style.display = ''; 
+            } else {
+                switchTab(activeTab);
+            }
+        });
+
+        // --- アイコン初期化 ---
+        function updateIcons() {
+            lucide.createIcons();
+        }
+
+        // --- 初期データ（サンプルワークフロー） ---
+        function loadInitialData() {
+            // モバイルでも見やすいよう少し左上に寄せる
+            nodes = [
+                { id: 'node_1', type: 'input', x: 40, y: 150, label: 'ユーザー入力' },
+                { id: 'node_2', type: 'ai', x: 340, y: 100, label: 'AI処理', prompt: 'あなたは優秀なアシスタントです。\nユーザーの入力を丁寧に要約して、箇条書きで分かりやすく抽出してください。' },
+                { id: 'node_3', type: 'output', x: 640, y: 150, label: '出力表示' }
+            ];
+            edges = [
+                { id: 'edge_1', from: 'node_1', to: 'node_2' },
+                { id: 'edge_2', from: 'node_2', to: 'node_3' }
+            ];
+            renderAll();
+        }
+
+        // --- ID生成 ---
+        function generateId(prefix) {
+            return prefix + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // --- ノードの追加 ---
+        function addNode(type) {
+            const id = generateId('node');
+            const scrollContainer = document.getElementById('canvas-container');
+            
+            const isMobile = window.innerWidth < 768;
+            const nodeWidth = isMobile ? 240 : 256;
+            
+            const x = scrollContainer.scrollLeft + scrollContainer.clientWidth / 2 - (nodeWidth / 2);
+            const y = scrollContainer.scrollTop + scrollContainer.clientHeight / 2 - 50;
+            
+            const newNode = {
+                id,
+                type,
+                x: Math.max(20, x),
+                y: Math.max(20, y),
+                label: type === 'input' ? 'ユーザー入力' : type === 'ai' ? 'AI処理' : '出力表示',
+                prompt: type === 'ai' ? '' : undefined
+            };
+            
+            nodes.push(newNode);
+            renderNodes();
+        }
+
+        function removeNode(id) {
+            nodes = nodes.filter(n => n.id !== id);
+            edges = edges.filter(e => e.from !== id && e.to !== id);
+            renderAll();
+        }
+
+        function removeEdge(id) {
+            edges = edges.filter(e => e.id !== id);
+            renderEdges();
+        }
+
+        function clearCanvas() {
+            if(confirm('ワークフローをすべてクリアしますか？')) {
+                nodes = [];
+                edges = [];
+                chatMessages.innerHTML = '';
+                renderAll();
+            }
+        }
+
+        // --- 描画処理 ---
+        function renderAll() {
+            renderNodes();
+            renderEdges();
+        }
+
+        function renderNodes() {
+            nodesLayer.innerHTML = '';
+            
+            nodes.forEach(node => {
+                const nodeEl = document.createElement('div');
+                nodeEl.className = `node-card bg-white rounded-xl border md:w-64 shadow-sm pointer-events-auto flex flex-col`;
+                
+                // タイプ別の色設定
+                let headerColor, iconName;
+                if (node.type === 'input') {
+                    headerColor = 'bg-blue-50 border-blue-200 text-blue-700';
+                    iconName = 'message-square';
+                    nodeEl.classList.add('border-blue-200');
+                } else if (node.type === 'ai') {
+                    headerColor = 'bg-purple-50 border-purple-200 text-purple-700';
+                    iconName = 'sparkles';
+                    nodeEl.classList.add('border-purple-200');
+                } else {
+                    headerColor = 'bg-emerald-50 border-emerald-200 text-emerald-700';
+                    iconName = 'monitor-stop';
+                    nodeEl.classList.add('border-emerald-200');
+                }
+
+                nodeEl.style.left = `${node.x}px`;
+                nodeEl.style.top = `${node.y}px`;
+                nodeEl.id = node.id;
+
+                // ヘッダー（ドラッグ用）
+                const header = document.createElement('div');
+                header.className = `p-2 md:p-2.5 rounded-t-xl border-b cursor-move flex justify-between items-center ${headerColor}`;
+                header.innerHTML = `
+                    <div class="flex items-center gap-1.5 font-semibold text-sm">
+                        <i data-lucide="${iconName}" class="w-4 h-4"></i> ${node.label}
+                    </div>
+                    <button onclick="removeNode('${node.id}')" class="text-slate-400 hover:text-red-500 transition p-1">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                `;
+                
+                // ドラッグイベント登録 (マウス＆タッチ)
+                header.addEventListener('mousedown', (e) => startDragNode(e, node.id));
+                header.addEventListener('touchstart', (e) => startDragNode(e, node.id), {passive: false});
+
+                // ボディ
+                const body = document.createElement('div');
+                body.className = 'p-3 flex-1 flex flex-col gap-2 relative bg-white rounded-b-xl';
+                
+                if (node.type === 'ai') {
+                    const label = document.createElement('label');
+                    label.className = 'text-xs font-semibold text-slate-500';
+                    label.innerText = 'プロンプト・目標設定';
+                    
+                    const textarea = document.createElement('textarea');
+                    textarea.className = 'w-full h-24 text-sm p-2 border border-slate-200 rounded-md focus:ring-1 focus:ring-purple-400 focus:border-purple-400 resize-none';
+                    textarea.placeholder = 'AIの振る舞いを指示してください...';
+                    textarea.value = node.prompt || '';
+                    textarea.addEventListener('input', (e) => {
+                        const targetNode = nodes.find(n => n.id === node.id);
+                        if(targetNode) targetNode.prompt = e.target.value;
+                    });
+                    // テキストエリア内のタッチはスクロール・入力用とする
+                    textarea.addEventListener('touchstart', (e) => e.stopPropagation(), {passive: true});
+                    
+                    body.appendChild(label);
+                    body.appendChild(textarea);
+                } else if (node.type === 'input') {
+                    body.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">チャットからの<br>入力を受け取ります</p>`;
+                } else if (node.type === 'output') {
+                    body.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">結果をチャットに<br>返信します</p>`;
+                }
+
+                nodeEl.appendChild(header);
+                nodeEl.appendChild(body);
+
+                // ポート
+                if (node.type !== 'input') {
+                    const portIn = document.createElement('div');
+                    portIn.className = 'port port-in';
+                    portIn.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+                    portIn.addEventListener('touchstart', (e) => { e.stopPropagation(); }, {passive: true});
+                    portIn.addEventListener('mouseup', (e) => finishConnection(e, node.id, 'in'));
+                    body.appendChild(portIn);
+                }
+                
+                if (node.type !== 'output') {
+                    const portOut = document.createElement('div');
+                    portOut.className = 'port port-out';
+                    portOut.addEventListener('mousedown', (e) => startConnection(e, node.id, 'out'));
+                    portOut.addEventListener('touchstart', (e) => startConnection(e, node.id, 'out'), {passive: false});
+                    body.appendChild(portOut);
+                }
+
+                nodesLayer.appendChild(nodeEl);
+            });
+            
+            updateIcons();
+            renderEdges(); 
+        }
+
+        // SVGのパス文字列を計算（ベジェ曲線）
+        function getPathData(x1, y1, x2, y2) {
+            const offset = Math.max(Math.abs(x2 - x1) / 2, 50);
+            return `M ${x1} ${y1} C ${x1 + offset} ${y1}, ${x2 - offset} ${y2}, ${x2} ${y2}`;
+        }
+
+        function renderEdges() {
+            edgesLayer.innerHTML = '';
+            
+            edges.forEach(edge => {
+                const fromNode = document.getElementById(edge.from);
+                const toNode = document.getElementById(edge.to);
+                
+                if (!fromNode || !toNode) return;
+
+                const fromRect = fromNode.querySelector('.port-out').getBoundingClientRect();
+                const toRect = toNode.querySelector('.port-in').getBoundingClientRect();
+                const canvasRect = canvas.getBoundingClientRect();
+
+                const x1 = fromRect.left + fromRect.width / 2 - canvasRect.left;
+                const y1 = fromRect.top + fromRect.height / 2 - canvasRect.top;
+                const x2 = toRect.left + toRect.width / 2 - canvasRect.left;
+                const y2 = toRect.top + toRect.height / 2 - canvasRect.top;
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', getPathData(x1, y1, x2, y2));
+                path.setAttribute('class', 'connection-line pointer-events-auto');
+                path.id = `line_${edge.id}`;
+                
+                // クリック（タップ）で削除
+                path.addEventListener('click', () => {
+                    if(confirm('この接続を削除しますか？')) {
+                        removeEdge(edge.id);
+                    }
+                });
+
+                edgesLayer.appendChild(path);
+            });
+        }
+
+        // --- ドラッグ＆ドロップ（ノード移動） ---
+        function startDragNode(e, id) {
+            if (e.target.closest('button')) return; 
+            if (e.cancelable) e.preventDefault();
+            
+            const nodeEl = document.getElementById(id);
+            const rect = nodeEl.getBoundingClientRect();
+            
+            isDraggingNode = true;
+            draggedNodeId = id;
+            
+            const pos = getEventPos(e);
+            dragOffset.x = pos.x - rect.left;
+            dragOffset.y = pos.y - rect.top;
+            
+            nodeEl.classList.add('dragging');
+        }
+
+        // --- 結線（エッジ）作成 ---
+        function startConnection(e, nodeId, type) {
+            e.stopPropagation();
+            if (e.cancelable) e.preventDefault();
+            
+            isConnecting = true;
+            connectionStartPort = { nodeId, type };
+            
+            tempEdgePath.style.display = 'block';
+            const pos = getEventPos(e);
+            updateTempEdge(pos.x, pos.y);
+        }
+
+        function updateTempEdge(clientX, clientY) {
+            if (!isConnecting || !connectionStartPort) return;
+            
+            const startNodeEl = document.getElementById(connectionStartPort.nodeId);
+            const portEl = startNodeEl.querySelector('.port-out');
+            
+            const portRect = portEl.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+            
+            const startX = portRect.left + portRect.width / 2 - canvasRect.left;
+            const startY = portRect.top + portRect.height / 2 - canvasRect.top;
+            
+            const currentX = clientX - canvasRect.left;
+            const currentY = clientY - canvasRect.top;
+            
+            tempEdgePath.setAttribute('d', getPathData(startX, startY, currentX, currentY));
+        }
+
+        function finishConnection(e, nodeId, type) {
+            if (e && e.stopPropagation) e.stopPropagation();
+            if (!isConnecting || !connectionStartPort) return;
+            
+            // out -> in のみ許可
+            if (connectionStartPort.type === 'out' && type === 'in') {
+                const fromId = connectionStartPort.nodeId;
+                const toId = nodeId;
+                
+                // ループや重複防止
+                if (fromId !== toId && !edges.some(edge => edge.from === fromId && edge.to === toId)) {
+                    edges.push({
+                        id: generateId('edge'),
+                        from: fromId,
+                        to: toId
+                    });
+                    renderEdges();
+                }
+            }
+            
+            endConnection();
+        }
+
+        function endConnection() {
+            isConnecting = false;
+            connectionStartPort = null;
+            tempEdgePath.style.display = 'none';
+        }
+
+        // --- グローバルイベント (マウス＆タッチ) ---
+        function handleMove(e) {
+            if (isDraggingNode || isConnecting) {
+                if (e.cancelable) e.preventDefault(); // スクロール防止
+                const pos = getEventPos(e);
+                
+                if (isDraggingNode && draggedNodeId) {
+                    const canvasRect = canvas.getBoundingClientRect();
+                    let newX = pos.x - canvasRect.left - dragOffset.x;
+                    let newY = pos.y - canvasRect.top - dragOffset.y;
+                    
+                    newX = Math.max(0, newX);
+                    newY = Math.max(0, newY);
+                    
+                    const nodeData = nodes.find(n => n.id === draggedNodeId);
+                    if (nodeData) {
+                        nodeData.x = newX;
+                        nodeData.y = newY;
+                        
+                        const nodeEl = document.getElementById(draggedNodeId);
+                        nodeEl.style.left = `${newX}px`;
+                        nodeEl.style.top = `${newY}px`;
+                        
+                        renderEdges();
+                    }
+                } else if (isConnecting) {
+                    updateTempEdge(pos.x, pos.y);
+                }
+            }
+        }
+
+        function handleUp(e) {
+            if (isDraggingNode && draggedNodeId) {
+                const nodeEl = document.getElementById(draggedNodeId);
+                if(nodeEl) nodeEl.classList.remove('dragging');
+                isDraggingNode = false;
+                draggedNodeId = null;
+            }
+            if (isConnecting) {
+                // タッチデバイスでポート上で指を離した場合の処理
+                if (e.type === 'touchend' && e.changedTouches && e.changedTouches.length > 0) {
+                    const touch = e.changedTouches[0];
+                    const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+                    if (targetEl && targetEl.classList.contains('port-in')) {
+                        const nodeEl = targetEl.closest('.node-card');
+                        if (nodeEl) {
+                            finishConnection(e, nodeEl.id, 'in');
+                            return;
+                        }
+                    }
+                }
+                endConnection(); 
+            }
+        }
+
+        document.addEventListener('mousemove', handleMove);
+        document.addEventListener('touchmove', handleMove, {passive: false});
+
+        document.addEventListener('mouseup', handleUp);
+        document.addEventListener('touchend', handleUp);
+
+        // --- チャットUI 処理 ---
+        function addChatMessage(role, content, id = null) {
+            const initMsg = chatMessages.querySelector('.text-center');
+            if (initMsg) initMsg.remove();
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `flex gap-3 max-w-[90%] ${role === 'user' ? 'ml-auto flex-row-reverse' : ''}`;
+            if (id) msgDiv.id = id;
+
+            const iconDiv = document.createElement('div');
+            iconDiv.className = `w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${role === 'user' ? 'bg-slate-200 text-slate-600' : 'bg-primary text-white'}`;
+            iconDiv.innerHTML = `<i data-lucide="${role === 'user' ? 'user' : 'bot'}" class="w-5 h-5"></i>`;
+
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = `p-3 rounded-2xl text-sm ${role === 'user' ? 'bg-slate-100 text-slate-800 rounded-tr-none' : 'bg-indigo-50 border border-indigo-100 text-slate-800 rounded-tl-none'}`;
+            bubbleDiv.innerHTML = content.replace(/\n/g, '<br>');
+
+            msgDiv.appendChild(iconDiv);
+            msgDiv.appendChild(bubbleDiv);
+            
+            chatMessages.appendChild(msgDiv);
+            updateIcons();
+            
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function removeChatMessage(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        async function handleChatSubmit(e) {
+            e.preventDefault();
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            addChatMessage('user', text);
+            chatInput.value = '';
+            
+            await executeWorkflow(text);
+        }
+
+        function testWorkflow() {
+            // モバイルの場合はテスト実行時に自動的にチャットタブへ遷移
+            if (window.innerWidth < 768) {
+                switchTab('chat');
+            }
+            chatInput.value = "こんにちは！テストメッセージです。";
+            chatInput.focus();
+        }
+
+        // --- ワークフロー実行エンジン ---
+        async function callAIAPI(prompt, input) {
+            const combinedPrompt = `[システム指示・目標]\n${prompt}\n\n[入力データ]\n${input}`;
+            
+            try {
+                const res = await fetch(WORKER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: combinedPrompt })
+                });
+                
+                if(!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                
+                const text = await res.text();
+                try {
+                    const data = JSON.parse(text);
+                    return data.response || data.text || data.choices?.[0]?.message?.content || text;
+                } catch(e) {
+                    return text; 
+                }
+            } catch (error) {
+                console.error("AI API Error:", error);
+                return `【エラー】AI呼び出しに失敗しました: ${error.message}`;
+            }
+        }
+
+        function highlightEdge(edgeId, isExecuting) {
+            const path = document.getElementById(`line_${edgeId}`);
+            if (path) {
+                if (isExecuting) path.classList.add('executing');
+                else path.classList.remove('executing');
+            }
+        }
+
+        async function executeWorkflow(inputText) {
+            const startNodes = nodes.filter(n => n.type === 'input');
+            if (startNodes.length === 0) {
+                addChatMessage('bot', '【警告】「ユーザー入力」ノードがありません。ワークフローを開始できません。');
+                return;
+            }
+
+            let queue = [];
+            for (const node of startNodes) {
+                queue.push({ nodeId: node.id, value: inputText, fromEdgeId: null });
+            }
+
+            let executedOutput = false;
+
+            while (queue.length > 0) {
+                const { nodeId, value, fromEdgeId } = queue.shift();
+                const node = nodes.find(n => n.id === nodeId);
+                if (!node) continue;
+
+                if (fromEdgeId) highlightEdge(fromEdgeId, false);
+
+                let outputValue = value;
+
+                try {
+                    if (node.type === 'ai') {
+                        const loadingId = `loading-${Date.now()}`;
+                        addChatMessage('bot', `<i data-lucide="loader" class="w-4 h-4 animate-spin inline-block mr-2 align-middle"></i>AI処理中...`, loadingId);
+                        
+                        const prompt = node.prompt || '';
+                        outputValue = await callAIAPI(prompt, value);
+                        
+                        removeChatMessage(loadingId);
+                    } else if (node.type === 'output') {
+                        addChatMessage('bot', outputValue);
+                        executedOutput = true;
+                    }
+                } catch (err) {
+                    addChatMessage('bot', `ノード [${node.label}] でエラーが発生しました。`);
+                    console.error(err);
+                }
+
+                const outgoingEdges = edges.filter(e => e.from === nodeId);
+                for (const edge of outgoingEdges) {
+                    highlightEdge(edge.id, true);
+                    await new Promise(r => setTimeout(r, 400)); 
+                    queue.push({ nodeId: edge.to, value: outputValue, fromEdgeId: edge.id });
+                }
+            }
+
+            if (!executedOutput) {
+                addChatMessage('bot', '<span class="text-slate-500 text-xs">※処理は完了しましたが、結果を出力する「出力表示」ノードに到達しませんでした。</span>');
+            }
+        }
+
+        // --- 初期化 ---
+        window.addEventListener('DOMContentLoaded', () => {
+            loadInitialData();
+            if (window.innerWidth < 768) {
+                switchTab('editor');
+            }
+        });
+
+    </script>
+</body>
+</html>
