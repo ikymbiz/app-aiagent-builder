@@ -59,31 +59,63 @@
             z-index: 50;
         }
 
-        /* ポート（接続口） モバイルでタップしやすいよう少し拡大 */
+        /* ポート（接続口）縦方向レイアウト用に位置変更 */
         .port {
             width: 18px;
             height: 18px;
             border-radius: 50%;
             position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
             border: 2px solid white;
             box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
             z-index: 30;
             transition: transform 0.1s;
         }
-        .port:hover {
-            transform: translateY(-50%) scale(1.3);
-        }
         .port-in {
-            left: -9px;
+            top: -9px;
+            left: 50%;
+            transform: translateX(-50%);
             background-color: #3b82f6;
             cursor: crosshair;
         }
+        .port-in:hover {
+            transform: translateX(-50%) scale(1.3);
+        }
+        
         .port-out {
-            right: -9px;
+            bottom: -9px;
+            top: auto;
+            left: 50%;
+            transform: translateX(-50%);
             background-color: #10b981;
             cursor: crosshair;
+        }
+        .port-out:hover {
+            transform: translateX(-50%) scale(1.3);
+        }
+
+        /* 分岐用ポート */
+        .port-out-true {
+            bottom: -9px;
+            top: auto;
+            left: 30%;
+            transform: translateX(-50%);
+            background-color: #10b981;
+            cursor: crosshair;
+        }
+        .port-out-true:hover {
+            transform: translateX(-50%) scale(1.3);
+        }
+
+        .port-out-false {
+            bottom: -9px;
+            top: auto;
+            left: 70%;
+            transform: translateX(-50%);
+            background-color: #ef4444;
+            cursor: crosshair;
+        }
+        .port-out-false:hover {
+            transform: translateX(-50%) scale(1.3);
         }
 
         /* カスタムスクロールバー */
@@ -102,25 +134,16 @@
             background: #94a3b8; 
         }
 
-        /* モバイルツールバー用のスクロールバー非表示 */
-        .scrollbar-hide::-webkit-scrollbar {
-            display: none;
-        }
-        .scrollbar-hide {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
-
         /* SVGの線 */
         .connection-line {
             fill: none;
             stroke: #94a3b8;
-            stroke-width: 4; /* モバイルの視認性向上 */
+            stroke-width: 4;
             stroke-linecap: round;
             transition: stroke 0.3s;
         }
         .connection-line:hover {
-            stroke: #ef4444; /* ホバーで赤色（削除のヒント） */
+            stroke: #ef4444; 
             cursor: pointer;
         }
         .connection-line.executing {
@@ -132,18 +155,22 @@
             to { stroke-dashoffset: -20; }
         }
 
-        /* モバイル用のノード幅調整 */
         @media (max-width: 767px) {
             .node-card {
                 width: 240px;
             }
         }
+        
+        /* パン操作用のカーソル設定 */
+        .grabbing-cursor {
+            cursor: grabbing !important;
+        }
     </style>
 </head>
 <body class="flex flex-col text-slate-800 font-sans">
 
-    <!-- ヘッダー (レスポンシブ調整) -->
-    <header class="bg-white border-b border-slate-200 h-14 md:h-16 flex items-center justify-between px-3 md:px-6 shrink-0 shadow-sm z-30">
+    <!-- ヘッダー -->
+    <header class="bg-white border-b border-slate-200 h-14 md:h-16 flex items-center justify-between px-3 md:px-6 shrink-0 shadow-sm z-30 relative">
         <div class="flex items-center gap-1 md:gap-2">
             <div class="bg-primary text-white p-1.5 md:p-2 rounded-lg">
                 <i data-lucide="bot" class="w-5 h-5 md:w-6 md:h-6"></i>
@@ -151,9 +178,34 @@
             <h1 class="text-base md:text-xl font-bold text-slate-800 tracking-tight">AIエージェント</h1>
             <span class="hidden md:inline-block ml-2 px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded font-medium border border-slate-200">ワークフロービルダー</span>
         </div>
-        <div class="flex gap-2 md:gap-3">
-            <button onclick="clearCanvas()" class="px-2 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-md transition flex items-center gap-1 md:gap-2">
-                <i data-lucide="trash-2" class="w-4 h-4"></i> <span class="hidden md:inline">クリア</span>
+        <div class="flex gap-1 md:gap-2 items-center">
+            <!-- ファイル/保存ドロップダウンボタン -->
+            <div class="relative group">
+                <button onclick="toggleDropdown('file-dropdown')" class="p-1.5 md:p-2 text-slate-600 hover:bg-slate-100 rounded-md transition" title="保存/読み込み">
+                    <i data-lucide="folder-open" class="w-4 h-4 md:w-5 md:h-5"></i>
+                </button>
+                <div id="file-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border border-slate-200 z-50 overflow-hidden">
+                    <button onclick="saveToLocalStorage(); closeDropdown('file-dropdown'); alert('ブラウザに保存しました');" class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"><i data-lucide="save" class="w-4 h-4"></i>ブラウザに保存</button>
+                    <button onclick="loadFromLocalStorage(); closeDropdown('file-dropdown'); alert('ブラウザから復元しました');" class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"><i data-lucide="rotate-ccw" class="w-4 h-4"></i>ブラウザから復元</button>
+                    <div class="border-t border-slate-100"></div>
+                    <button onclick="exportWorkflow(); closeDropdown('file-dropdown');" class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"><i data-lucide="download" class="w-4 h-4"></i>ファイル出力</button>
+                    <button onclick="document.getElementById('import-file').click(); closeDropdown('file-dropdown');" class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"><i data-lucide="upload" class="w-4 h-4"></i>ファイル読込</button>
+                    <input type="file" id="import-file" accept=".json" class="hidden" onchange="importWorkflow(event)">
+                </div>
+            </div>
+            <!-- 設定ボタン -->
+            <button onclick="openModal('settings-modal')" class="p-1.5 md:p-2 text-slate-600 hover:bg-slate-100 rounded-md transition" title="AI設定">
+                <i data-lucide="settings" class="w-4 h-4 md:w-5 md:h-5"></i>
+            </button>
+            <!-- デプロイボタン -->
+            <button onclick="openModal('deploy-modal')" class="p-1.5 md:p-2 text-slate-600 hover:bg-slate-100 rounded-md transition" title="デプロイ">
+                <i data-lucide="cloud-upload" class="w-4 h-4 md:w-5 md:h-5 text-indigo-600"></i>
+            </button>
+
+            <div class="w-px h-5 md:h-6 bg-slate-200 mx-1 md:mx-2"></div>
+
+            <button onclick="clearCanvas()" class="px-2 md:px-3 py-1.5 md:py-2 text-xs md:text-sm font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-md transition flex items-center gap-1 md:gap-2" title="クリア">
+                <i data-lucide="trash-2" class="w-4 h-4"></i><span class="hidden md:inline">クリア</span>
             </button>
             <button onclick="testWorkflow()" class="px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm font-medium bg-primary hover:bg-indigo-700 text-white rounded-md shadow-sm transition flex items-center gap-1 md:gap-2">
                 <i data-lucide="play" class="w-4 h-4"></i> <span class="hidden md:inline">テスト実行</span>
@@ -168,50 +220,59 @@
     </div>
 
     <!-- メインコンテンツ -->
-    <main class="flex-1 flex overflow-hidden flex-col md:flex-row">
+    <main class="flex-1 flex overflow-hidden flex-col md:flex-row relative">
         
         <!-- 左ペイン：ワークフローエディタ -->
-        <section id="pane-editor" class="flex-1 flex flex-col relative md:border-r border-slate-200 w-full md:w-auto shrink-0 transition-transform">
-            <!-- ツールバー (横スクロール対応) -->
-            <div class="h-14 bg-white border-b border-slate-200 flex items-center px-3 md:px-4 gap-2 md:gap-3 z-20 shadow-sm overflow-x-auto scrollbar-hide">
-                <span class="hidden md:inline text-xs font-semibold text-slate-500 mr-2 uppercase tracking-wider shrink-0">ノード追加:</span>
-                <button onclick="addNode('input')" class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-xs md:text-sm font-medium transition">
-                    <i data-lucide="message-square" class="w-4 h-4"></i> ユーザー入力
-                </button>
-                <button onclick="addNode('ai')" class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded text-xs md:text-sm font-medium transition">
-                    <i data-lucide="sparkles" class="w-4 h-4"></i> AI処理 (Gemini)
-                </button>
-                <button onclick="addNode('output')" class="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded text-xs md:text-sm font-medium transition">
-                    <i data-lucide="monitor-stop" class="w-4 h-4"></i> 出力表示
-                </button>
-            </div>
-
+        <section id="pane-editor" class="flex-1 flex flex-col relative w-full md:border-r border-slate-200 shrink-0 transition-transform">
+            
             <!-- キャンバスエリア -->
             <div id="canvas-container" class="flex-1 overflow-auto relative canvas-bg">
-                <!-- 実キャンバス領域 (十分な広さを確保) -->
                 <div id="canvas" class="relative w-[3000px] h-[3000px]">
                     <!-- 結線用SVGレイヤー -->
                     <svg id="edges-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none z-0"></svg>
-                    <!-- 一時的な結線用SVG (ドラッグ中) -->
+                    <!-- 一時的な結線用SVG -->
                     <svg id="temp-edge-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none z-40">
                         <path id="temp-edge" class="connection-line" style="stroke-dasharray: 5; opacity: 0.6; display: none;"></path>
                     </svg>
                     
-                    <!-- ノード要素がここに追加される -->
+                    <!-- ノード要素 -->
                     <div id="nodes-layer" class="absolute top-0 left-0 w-full h-full pointer-events-none z-10"></div>
+                </div>
+            </div>
+
+            <!-- コンテキストメニュー（長押し・右クリック用） -->
+            <div id="context-menu" class="hidden absolute flex-col gap-1.5 p-2 bg-white/90 backdrop-blur-md shadow-2xl border border-slate-200 rounded-xl z-50 w-48">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1">ノードを追加</div>
+                <button onclick="addNode('input')" class="flex items-center gap-3 px-3 py-2 bg-white border border-transparent hover:border-blue-200 hover:bg-blue-50 rounded-lg text-sm font-medium text-slate-700 transition w-full text-left">
+                    <i data-lucide="message-square" class="w-4 h-4 text-blue-600"></i>ユーザー入力
+                </button>
+                <button onclick="addNode('ai')" class="flex items-center gap-3 px-3 py-2 bg-white border border-transparent hover:border-purple-200 hover:bg-purple-50 rounded-lg text-sm font-medium text-slate-700 transition w-full text-left">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-purple-600"></i>AI処理
+                </button>
+                <button onclick="addNode('condition')" class="flex items-center gap-3 px-3 py-2 bg-white border border-transparent hover:border-orange-200 hover:bg-orange-50 rounded-lg text-sm font-medium text-slate-700 transition w-full text-left">
+                    <i data-lucide="split" class="w-4 h-4 text-orange-600"></i>条件分岐
+                </button>
+                <button onclick="addNode('output')" class="flex items-center gap-3 px-3 py-2 bg-white border border-transparent hover:border-emerald-200 hover:bg-emerald-50 rounded-lg text-sm font-medium text-slate-700 transition w-full text-left">
+                    <i data-lucide="monitor-stop" class="w-4 h-4 text-emerald-600"></i>出力表示
+                </button>
+            </div>
+            
+            <!-- ガイドメッセージ -->
+            <div class="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none">
+                <div class="bg-black/60 text-white text-xs px-4 py-2 rounded-full shadow-lg backdrop-blur-sm hidden md:block">
+                    右クリックまたは長押しでノードを追加
                 </div>
             </div>
         </section>
 
         <!-- 右ペイン：チャットUI -->
-        <section id="pane-chat" class="w-full md:w-96 bg-white flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-20 hidden md:flex shrink-0">
+        <section id="pane-chat" class="w-full md:w-96 bg-white flex flex-col shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-20 hidden md:flex shrink-0 relative">
             <div class="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
                 <h2 class="font-semibold text-slate-800 flex items-center gap-2">
                     <i data-lucide="message-circle" class="w-5 h-5 text-primary"></i> プレビュー・チャット
                 </h2>
             </div>
             
-            <!-- メッセージ表示エリア -->
             <div id="chat-messages" class="flex-1 overflow-y-auto p-4 flex flex-col gap-4 bg-white">
                 <div class="flex flex-col text-center text-slate-400 my-8">
                     <i data-lucide="bot" class="w-12 h-12 mx-auto mb-2 opacity-50"></i>
@@ -219,7 +280,6 @@
                 </div>
             </div>
             
-            <!-- 入力エリア -->
             <div class="p-3 md:p-4 border-t border-slate-100 bg-white">
                 <form id="chat-form" onsubmit="handleChatSubmit(event)" class="relative">
                     <textarea 
@@ -235,6 +295,82 @@
                 </form>
             </div>
         </section>
+        
+        <!-- オーバーレイ：設定モーダル -->
+        <div id="settings-modal" class="hidden fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 class="font-semibold text-slate-800 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5"></i>AIプロバイダー設定</h3>
+                    <button onclick="closeModal('settings-modal')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+                </div>
+                <div class="p-6 flex flex-col gap-5">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">利用するAI API</label>
+                        <div class="flex flex-col gap-3">
+                            <label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
+                                <input type="radio" name="ai-provider" value="worker" class="mt-1 text-primary focus:ring-primary" checked onchange="toggleApiKeyInput()">
+                                <div>
+                                    <div class="font-medium text-sm">Cloudflare Worker (プロキシ)</div>
+                                    <div class="text-xs text-slate-500 mt-0.5">事前設定済みのエンドポイントを使用します。キー不要。</div>
+                                </div>
+                            </label>
+                            <label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
+                                <input type="radio" name="ai-provider" value="gemini" class="mt-1 text-primary focus:ring-primary" onchange="toggleApiKeyInput()">
+                                <div>
+                                    <div class="font-medium text-sm">Gemini API (直接呼び出し)</div>
+                                    <div class="text-xs text-slate-500 mt-0.5">ご自身のAPIキーを使用して、高速かつ制限なく利用します。</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="api-key-container" class="hidden transition-all duration-300">
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Gemini API キー</label>
+                        <input type="password" id="gemini-api-key" placeholder="AIzaSy..." class="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                        <p class="text-[11px] text-slate-500 mt-1">※キーはブラウザ（LocalStorage）内にのみ保存され、外部サーバには送信されません。</p>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
+                    <button onclick="closeModal('settings-modal')" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-md transition">キャンセル</button>
+                    <button onclick="saveSettings()" class="px-4 py-2 text-sm font-medium bg-primary text-white hover:bg-indigo-700 rounded-md transition shadow-sm">設定を保存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- オーバーレイ：デプロイモーダル -->
+        <div id="deploy-modal" class="hidden fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+                    <h3 class="font-bold text-indigo-900 flex items-center gap-2"><i data-lucide="cloud-upload" class="w-5 h-5"></i>GitHubにデプロイ</h3>
+                    <button onclick="closeModal('deploy-modal')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+                </div>
+                <div class="p-6 flex-1 overflow-y-auto flex flex-col gap-4">
+                    <p class="text-sm text-slate-600 mb-2">作成したワークフローを単一のWebアプリとしてGitHub Pagesにデプロイします。</p>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">GitHub Access Token (repo権限)</label>
+                        <input type="password" id="gh-token" placeholder="ghp_..." class="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">リポジトリ名 (新規/既存)</label>
+                        <input type="text" id="gh-repo" placeholder="my-ai-agent" class="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                    </div>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="gh-private" class="text-primary focus:ring-primary rounded">
+                        <span class="text-sm font-medium text-slate-700">新規作成時は非公開(Private)にする</span>
+                    </label>
+                    <div class="border-t border-slate-200 my-2"></div>
+                    <div class="flex justify-center">
+                        <button onclick="doGitHubDeploy()" class="px-6 py-2.5 text-sm font-bold bg-[#2da44e] text-white hover:bg-[#2c974b] rounded-md transition shadow-sm flex items-center gap-2">
+                            <i data-lucide="github" class="w-5 h-5"></i>デプロイを実行
+                        </button>
+                    </div>
+                    <!-- ログエリア -->
+                    <div class="mt-4">
+                        <h4 class="text-xs font-semibold text-slate-500 mb-1 uppercase">実行ログ</h4>
+                        <div id="deploy-log" class="bg-slate-900 text-green-400 font-mono text-[11px] p-3 rounded-lg h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </main>
 
     <script>
@@ -242,33 +378,40 @@
         const WORKER_URL = 'https://green-credit-a6fb.ikymbiz.workers.dev';
         
         let nodes = [];
-        let edges = [];
+        let edges = []; // { id, from, to, fromPort }
+        
+        // ドラッグ・パン・接続操作のステート
         let isDraggingNode = false;
         let draggedNodeId = null;
         let dragOffset = { x: 0, y: 0 };
         
         let isConnecting = false;
-        let connectionStartPort = null; // { nodeId, type: 'out' }
+        let connectionStartPort = null; // { nodeId, type: 'out', portName: 'out'|'true'|'false' }
+
+        let isPanning = false;
+        let panStart = {x: 0, y: 0, scrollLeft: 0, scrollTop: 0};
+        let longPressTimer = null;
+        let contextMenuTargetPos = {x: 0, y: 0};
+        
+        // オートセーブ用タイマー
+        let autoSaveTimer = null;
 
         const canvas = document.getElementById('canvas');
+        const canvasContainer = document.getElementById('canvas-container');
         const nodesLayer = document.getElementById('nodes-layer');
         const edgesLayer = document.getElementById('edges-layer');
         const tempEdgePath = document.getElementById('temp-edge');
         const chatMessages = document.getElementById('chat-messages');
         const chatInput = document.getElementById('chat-input');
+        const contextMenu = document.getElementById('context-menu');
 
-        // タッチ＆マウスイベント共通位置取得
         function getEventPos(e) {
-            if (e.touches && e.touches.length > 0) {
-                return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            }
-            if (e.changedTouches && e.changedTouches.length > 0) {
-                return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
-            }
+            if (e.touches && e.touches.length > 0) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            if (e.changedTouches && e.changedTouches.length > 0) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
             return { x: e.clientX, y: e.clientY };
         }
 
-        // --- タブ切り替え制御（モバイル用） ---
+        // --- タブ切り替え（モバイル） ---
         let activeTab = 'editor';
         function switchTab(tab) {
             activeTab = tab;
@@ -311,64 +454,183 @@
             }
         });
 
-        // --- アイコン初期化 ---
         function updateIcons() {
             lucide.createIcons();
         }
 
-        // --- 初期データ（サンプルワークフロー） ---
-        function loadInitialData() {
-            // モバイルでも見やすいよう少し左上に寄せる
-            nodes = [
-                { id: 'node_1', type: 'input', x: 40, y: 150, label: 'ユーザー入力' },
-                { id: 'node_2', type: 'ai', x: 340, y: 100, label: 'AI処理', prompt: 'あなたは優秀なアシスタントです。\nユーザーの入力を丁寧に要約して、箇条書きで分かりやすく抽出してください。' },
-                { id: 'node_3', type: 'output', x: 640, y: 150, label: '出力表示' }
-            ];
-            edges = [
-                { id: 'edge_1', from: 'node_1', to: 'node_2' },
-                { id: 'edge_2', from: 'node_2', to: 'node_3' }
-            ];
-            renderAll();
+        // --- 保存・読み込み機能 ---
+        function triggerAutoSave() {
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(() => {
+                saveToLocalStorage();
+            }, 1000);
         }
 
-        // --- ID生成 ---
+        function saveToLocalStorage() {
+            localStorage.setItem('workflow_nodes', JSON.stringify(nodes));
+            localStorage.setItem('workflow_edges', JSON.stringify(edges));
+        }
+
+        function loadFromLocalStorage() {
+            const savedNodes = localStorage.getItem('workflow_nodes');
+            const savedEdges = localStorage.getItem('workflow_edges');
+            if(savedNodes && savedEdges) {
+                nodes = JSON.parse(savedNodes);
+                edges = JSON.parse(savedEdges);
+                renderAll();
+                return true;
+            }
+            return false;
+        }
+
+        function exportWorkflow() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({nodes, edges}, null, 2));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href",     dataStr     );
+            dlAnchorElem.setAttribute("download", "workflow.json");
+            dlAnchorElem.click();
+        }
+
+        function importWorkflow(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if(data.nodes && data.edges) {
+                        nodes = data.nodes;
+                        edges = data.edges;
+                        renderAll();
+                        triggerAutoSave();
+                        alert('ワークフローを読み込みました。');
+                    } else {
+                        alert('無効なファイル形式です。');
+                    }
+                } catch(err) {
+                    alert('ファイルの読み込みに失敗しました。');
+                }
+                event.target.value = ''; // reset
+            };
+            reader.readAsText(file);
+        }
+
+        // --- 初期データ（縦並び・分岐サンプル） ---
+        function loadInitialData() {
+            const isMobile = window.innerWidth < 768;
+            const baseX = isMobile ? 40 : 300;
+            
+            nodes = [
+                { id: 'node_1', type: 'input', x: baseX, y: 50, label: 'ユーザー入力' },
+                { id: 'node_2', type: 'ai', x: baseX, y: 220, label: 'AI処理', prompt: 'ユーザーの入力を分析し、内容が「承認」と「却下」のどちらに該当するか判定し、回答に必ずその単語を含めてください。' },
+                { id: 'node_3', type: 'condition', x: baseX, y: 440, label: '条件分岐', condition: '承認' },
+                { id: 'node_4', type: 'output', x: baseX - 150, y: 620, label: '出力表示 (承認時)' },
+                { id: 'node_5', type: 'output', x: baseX + 150, y: 620, label: '出力表示 (却下時)' }
+            ];
+            edges = [
+                { id: 'edge_1', from: 'node_1', to: 'node_2', fromPort: 'out' },
+                { id: 'edge_2', from: 'node_2', to: 'node_3', fromPort: 'out' },
+                { id: 'edge_3', from: 'node_3', to: 'node_4', fromPort: 'true' },
+                { id: 'edge_4', from: 'node_3', to: 'node_5', fromPort: 'false' }
+            ];
+            renderAll();
+            triggerAutoSave();
+        }
+
         function generateId(prefix) {
             return prefix + '_' + Math.random().toString(36).substr(2, 9);
         }
 
-        // --- ノードの追加 ---
+        // --- コンテキストメニュー ---
+        function showContextMenu(clientX, clientY) {
+            contextMenu.style.left = `${clientX}px`;
+            contextMenu.style.top = `${clientY}px`;
+            contextMenu.classList.remove('hidden');
+            contextMenu.classList.add('flex');
+            
+            const rect = canvas.getBoundingClientRect();
+            contextMenuTargetPos = {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function hideContextMenu() {
+            contextMenu.classList.add('hidden');
+            contextMenu.classList.remove('flex');
+        }
+
+        // ドロップダウンやメニューを外側クリックで閉じる処理
+        document.addEventListener('click', (e) => {
+            if(!e.target.closest('#context-menu') && !e.target.closest('.canvas-bg')) {
+                hideContextMenu();
+            }
+            if(!e.target.closest('.group')) {
+                closeDropdown('file-dropdown');
+            }
+        });
+
+        function toggleDropdown(id) {
+            const el = document.getElementById(id);
+            if(el.classList.contains('hidden')) {
+                el.classList.remove('hidden');
+            } else {
+                el.classList.add('hidden');
+            }
+        }
+        function closeDropdown(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
         function addNode(type) {
+            hideContextMenu();
             const id = generateId('node');
-            const scrollContainer = document.getElementById('canvas-container');
             
-            const isMobile = window.innerWidth < 768;
-            const nodeWidth = isMobile ? 240 : 256;
+            let x, y;
+            if (contextMenuTargetPos.x > 0) {
+                x = contextMenuTargetPos.x;
+                y = contextMenuTargetPos.y;
+            } else {
+                const isMobile = window.innerWidth < 768;
+                const nodeWidth = isMobile ? 240 : 256;
+                x = canvasContainer.scrollLeft + canvasContainer.clientWidth / 2 - (nodeWidth / 2);
+                y = canvasContainer.scrollTop + canvasContainer.clientHeight / 2 - 50;
+            }
+            contextMenuTargetPos = {x: 0, y: 0}; // reset
             
-            const x = scrollContainer.scrollLeft + scrollContainer.clientWidth / 2 - (nodeWidth / 2);
-            const y = scrollContainer.scrollTop + scrollContainer.clientHeight / 2 - 50;
+            const labels = {
+                'input': 'ユーザー入力',
+                'ai': 'AI処理',
+                'condition': '条件分岐',
+                'output': '出力表示'
+            };
             
             const newNode = {
                 id,
                 type,
                 x: Math.max(20, x),
                 y: Math.max(20, y),
-                label: type === 'input' ? 'ユーザー入力' : type === 'ai' ? 'AI処理' : '出力表示',
-                prompt: type === 'ai' ? '' : undefined
+                label: labels[type],
+                prompt: type === 'ai' ? '' : undefined,
+                condition: type === 'condition' ? '' : undefined
             };
             
             nodes.push(newNode);
             renderNodes();
+            triggerAutoSave();
         }
 
         function removeNode(id) {
             nodes = nodes.filter(n => n.id !== id);
             edges = edges.filter(e => e.from !== id && e.to !== id);
             renderAll();
+            triggerAutoSave();
         }
 
         function removeEdge(id) {
             edges = edges.filter(e => e.id !== id);
             renderEdges();
+            triggerAutoSave();
         }
 
         function clearCanvas() {
@@ -377,10 +639,10 @@
                 edges = [];
                 chatMessages.innerHTML = '';
                 renderAll();
+                triggerAutoSave();
             }
         }
 
-        // --- 描画処理 ---
         function renderAll() {
             renderNodes();
             renderEdges();
@@ -393,43 +655,35 @@
                 const nodeEl = document.createElement('div');
                 nodeEl.className = `node-card bg-white rounded-xl border md:w-64 shadow-sm pointer-events-auto flex flex-col`;
                 
-                // タイプ別の色設定
                 let headerColor, iconName;
                 if (node.type === 'input') {
-                    headerColor = 'bg-blue-50 border-blue-200 text-blue-700';
-                    iconName = 'message-square';
-                    nodeEl.classList.add('border-blue-200');
+                    headerColor = 'bg-blue-50 border-blue-200 text-blue-700'; iconName = 'message-square'; nodeEl.classList.add('border-blue-200');
                 } else if (node.type === 'ai') {
-                    headerColor = 'bg-purple-50 border-purple-200 text-purple-700';
-                    iconName = 'sparkles';
-                    nodeEl.classList.add('border-purple-200');
+                    headerColor = 'bg-purple-50 border-purple-200 text-purple-700'; iconName = 'sparkles'; nodeEl.classList.add('border-purple-200');
+                } else if (node.type === 'condition') {
+                    headerColor = 'bg-orange-50 border-orange-200 text-orange-700'; iconName = 'split'; nodeEl.classList.add('border-orange-200');
                 } else {
-                    headerColor = 'bg-emerald-50 border-emerald-200 text-emerald-700';
-                    iconName = 'monitor-stop';
-                    nodeEl.classList.add('border-emerald-200');
+                    headerColor = 'bg-emerald-50 border-emerald-200 text-emerald-700'; iconName = 'monitor-stop'; nodeEl.classList.add('border-emerald-200');
                 }
 
                 nodeEl.style.left = `${node.x}px`;
                 nodeEl.style.top = `${node.y}px`;
                 nodeEl.id = node.id;
 
-                // ヘッダー（ドラッグ用）
                 const header = document.createElement('div');
                 header.className = `p-2 md:p-2.5 rounded-t-xl border-b cursor-move flex justify-between items-center ${headerColor}`;
                 header.innerHTML = `
-                    <div class="flex items-center gap-1.5 font-semibold text-sm">
+                    <div class="flex items-center gap-1.5 font-semibold text-sm pointer-events-none">
                         <i data-lucide="${iconName}" class="w-4 h-4"></i> ${node.label}
                     </div>
-                    <button onclick="removeNode('${node.id}')" class="text-slate-400 hover:text-red-500 transition p-1">
+                    <button onclick="removeNode('${node.id}')" class="text-slate-400 hover:text-red-500 transition p-1 z-10">
                         <i data-lucide="x" class="w-4 h-4"></i>
                     </button>
                 `;
                 
-                // ドラッグイベント登録 (マウス＆タッチ)
                 header.addEventListener('mousedown', (e) => startDragNode(e, node.id));
                 header.addEventListener('touchstart', (e) => startDragNode(e, node.id), {passive: false});
 
-                // ボディ
                 const body = document.createElement('div');
                 body.className = 'p-3 flex-1 flex flex-col gap-2 relative bg-white rounded-b-xl';
                 
@@ -444,37 +698,83 @@
                     textarea.value = node.prompt || '';
                     textarea.addEventListener('input', (e) => {
                         const targetNode = nodes.find(n => n.id === node.id);
-                        if(targetNode) targetNode.prompt = e.target.value;
+                        if(targetNode) {
+                            targetNode.prompt = e.target.value;
+                            triggerAutoSave();
+                        }
                     });
-                    // テキストエリア内のタッチはスクロール・入力用とする
-                    textarea.addEventListener('touchstart', (e) => e.stopPropagation(), {passive: true});
+                    textarea.addEventListener('mousedown', e => e.stopPropagation());
+                    textarea.addEventListener('touchstart', e => e.stopPropagation(), {passive: true});
                     
                     body.appendChild(label);
                     body.appendChild(textarea);
+                } else if (node.type === 'condition') {
+                    const label = document.createElement('label');
+                    label.className = 'text-xs font-semibold text-slate-500';
+                    label.innerText = '分岐条件 (左記キーワードを含むか)';
+                    
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'w-full text-sm p-2 border border-slate-200 rounded-md focus:ring-1 focus:ring-orange-400 focus:border-orange-400';
+                    input.placeholder = '例: 承認, 成功';
+                    input.value = node.condition || '';
+                    input.addEventListener('input', (e) => {
+                        const targetNode = nodes.find(n => n.id === node.id);
+                        if(targetNode) {
+                            targetNode.condition = e.target.value;
+                            triggerAutoSave();
+                        }
+                    });
+                    input.addEventListener('mousedown', e => e.stopPropagation());
+                    input.addEventListener('touchstart', e => e.stopPropagation(), {passive: true});
+                    
+                    body.appendChild(label);
+                    body.appendChild(input);
                 } else if (node.type === 'input') {
-                    body.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">チャットからの<br>入力を受け取ります</p>`;
+                    body.innerHTML = `<p class="text-xs text-slate-500 text-center py-4 pointer-events-none">チャットからの<br>入力を受け取ります</p>`;
                 } else if (node.type === 'output') {
-                    body.innerHTML = `<p class="text-xs text-slate-500 text-center py-4">結果をチャットに<br>返信します</p>`;
+                    body.innerHTML = `<p class="text-xs text-slate-500 text-center py-4 pointer-events-none">結果をチャットに<br>返信します</p>`;
                 }
 
                 nodeEl.appendChild(header);
                 nodeEl.appendChild(body);
 
-                // ポート
+                // Inポート
                 if (node.type !== 'input') {
                     const portIn = document.createElement('div');
                     portIn.className = 'port port-in';
+                    portIn.dataset.port = 'in';
                     portIn.addEventListener('mousedown', (e) => { e.stopPropagation(); });
                     portIn.addEventListener('touchstart', (e) => { e.stopPropagation(); }, {passive: true});
                     portIn.addEventListener('mouseup', (e) => finishConnection(e, node.id, 'in'));
                     body.appendChild(portIn);
                 }
                 
-                if (node.type !== 'output') {
+                // Outポート
+                if (node.type === 'condition') {
+                    const portOutTrue = document.createElement('div');
+                    portOutTrue.className = 'port port-out-true';
+                    portOutTrue.dataset.port = 'true';
+                    portOutTrue.title = '条件に一致 (True)';
+                    portOutTrue.innerHTML = '<span class="absolute top-4 left-1/2 -translate-x-1/2 text-[10px] text-emerald-600 font-bold pointer-events-none">Yes</span>';
+                    portOutTrue.addEventListener('mousedown', (e) => startConnection(e, node.id, 'out', 'true'));
+                    portOutTrue.addEventListener('touchstart', (e) => startConnection(e, node.id, 'out', 'true'), {passive: false});
+                    body.appendChild(portOutTrue);
+
+                    const portOutFalse = document.createElement('div');
+                    portOutFalse.className = 'port port-out-false';
+                    portOutFalse.dataset.port = 'false';
+                    portOutFalse.title = '条件に不一致 (False)';
+                    portOutFalse.innerHTML = '<span class="absolute top-4 left-1/2 -translate-x-1/2 text-[10px] text-red-600 font-bold pointer-events-none">No</span>';
+                    portOutFalse.addEventListener('mousedown', (e) => startConnection(e, node.id, 'out', 'false'));
+                    portOutFalse.addEventListener('touchstart', (e) => startConnection(e, node.id, 'out', 'false'), {passive: false});
+                    body.appendChild(portOutFalse);
+                } else if (node.type !== 'output') {
                     const portOut = document.createElement('div');
                     portOut.className = 'port port-out';
-                    portOut.addEventListener('mousedown', (e) => startConnection(e, node.id, 'out'));
-                    portOut.addEventListener('touchstart', (e) => startConnection(e, node.id, 'out'), {passive: false});
+                    portOut.dataset.port = 'out';
+                    portOut.addEventListener('mousedown', (e) => startConnection(e, node.id, 'out', 'out'));
+                    portOut.addEventListener('touchstart', (e) => startConnection(e, node.id, 'out', 'out'), {passive: false});
                     body.appendChild(portOut);
                 }
 
@@ -482,13 +782,12 @@
             });
             
             updateIcons();
-            renderEdges(); 
         }
 
-        // SVGのパス文字列を計算（ベジェ曲線）
+        // 縦方向のベジェ曲線
         function getPathData(x1, y1, x2, y2) {
-            const offset = Math.max(Math.abs(x2 - x1) / 2, 50);
-            return `M ${x1} ${y1} C ${x1 + offset} ${y1}, ${x2 - offset} ${y2}, ${x2} ${y2}`;
+            const offset = Math.max(Math.abs(y2 - y1) / 2, 50);
+            return `M ${x1} ${y1} C ${x1} ${y1 + offset}, ${x2} ${y2 - offset}, ${x2} ${y2}`;
         }
 
         function renderEdges() {
@@ -500,8 +799,13 @@
                 
                 if (!fromNode || !toNode) return;
 
-                const fromRect = fromNode.querySelector('.port-out').getBoundingClientRect();
-                const toRect = toNode.querySelector('.port-in').getBoundingClientRect();
+                const fromPortEl = fromNode.querySelector(`[data-port="${edge.fromPort}"]`);
+                const toPortEl = toNode.querySelector('[data-port="in"]');
+                
+                if (!fromPortEl || !toPortEl) return;
+
+                const fromRect = fromPortEl.getBoundingClientRect();
+                const toRect = toPortEl.getBoundingClientRect();
                 const canvasRect = canvas.getBoundingClientRect();
 
                 const x1 = fromRect.left + fromRect.width / 2 - canvasRect.left;
@@ -514,7 +818,6 @@
                 path.setAttribute('class', 'connection-line pointer-events-auto');
                 path.id = `line_${edge.id}`;
                 
-                // クリック（タップ）で削除
                 path.addEventListener('click', () => {
                     if(confirm('この接続を削除しますか？')) {
                         removeEdge(edge.id);
@@ -525,11 +828,12 @@
             });
         }
 
-        // --- ドラッグ＆ドロップ（ノード移動） ---
+        // --- ドラッグ、パン、結線の操作 ---
         function startDragNode(e, id) {
             if (e.target.closest('button')) return; 
             if (e.cancelable) e.preventDefault();
             
+            hideContextMenu();
             const nodeEl = document.getElementById(id);
             const rect = nodeEl.getBoundingClientRect();
             
@@ -543,13 +847,13 @@
             nodeEl.classList.add('dragging');
         }
 
-        // --- 結線（エッジ）作成 ---
-        function startConnection(e, nodeId, type) {
+        function startConnection(e, nodeId, type, portName) {
             e.stopPropagation();
             if (e.cancelable) e.preventDefault();
+            hideContextMenu();
             
             isConnecting = true;
-            connectionStartPort = { nodeId, type };
+            connectionStartPort = { nodeId, type, portName };
             
             tempEdgePath.style.display = 'block';
             const pos = getEventPos(e);
@@ -560,8 +864,9 @@
             if (!isConnecting || !connectionStartPort) return;
             
             const startNodeEl = document.getElementById(connectionStartPort.nodeId);
-            const portEl = startNodeEl.querySelector('.port-out');
-            
+            const portEl = startNodeEl.querySelector(`[data-port="${connectionStartPort.portName}"]`);
+            if(!portEl) return;
+
             const portRect = portEl.getBoundingClientRect();
             const canvasRect = canvas.getBoundingClientRect();
             
@@ -578,22 +883,22 @@
             if (e && e.stopPropagation) e.stopPropagation();
             if (!isConnecting || !connectionStartPort) return;
             
-            // out -> in のみ許可
             if (connectionStartPort.type === 'out' && type === 'in') {
                 const fromId = connectionStartPort.nodeId;
                 const toId = nodeId;
+                const fromPort = connectionStartPort.portName;
                 
-                // ループや重複防止
-                if (fromId !== toId && !edges.some(edge => edge.from === fromId && edge.to === toId)) {
+                if (fromId !== toId && !edges.some(edge => edge.from === fromId && edge.to === toId && edge.fromPort === fromPort)) {
                     edges.push({
                         id: generateId('edge'),
                         from: fromId,
-                        to: toId
+                        to: toId,
+                        fromPort: fromPort
                     });
                     renderEdges();
+                    triggerAutoSave();
                 }
             }
-            
             endConnection();
         }
 
@@ -603,11 +908,64 @@
             tempEdgePath.style.display = 'none';
         }
 
-        // --- グローバルイベント (マウス＆タッチ) ---
+        function startPan(e) {
+            if (e.button !== 0 && !e.touches) return;
+            if (e.target.closest('.node-card') || e.target.closest('.connection-line')) return;
+            hideContextMenu();
+
+            isPanning = true;
+            const pos = getEventPos(e);
+            panStart = {
+                x: pos.x,
+                y: pos.y,
+                scrollLeft: canvasContainer.scrollLeft,
+                scrollTop: canvasContainer.scrollTop
+            };
+            if(e.type === 'mousedown') canvasContainer.classList.add('grabbing-cursor');
+        }
+
+        canvasContainer.addEventListener('mousedown', startPan);
+        canvasContainer.addEventListener('contextmenu', (e) => {
+            if (e.target.closest('.node-card')) return;
+            e.preventDefault();
+            showContextMenu(e.clientX, e.clientY);
+        });
+
+        canvasContainer.addEventListener('touchstart', (e) => {
+            if (e.target.closest('.node-card') || e.target.closest('.connection-line')) return;
+            startPan(e);
+            if (e.touches.length === 1) {
+                longPressTimer = setTimeout(() => {
+                    isPanning = false; // 長押し成立でパンキャンセル
+                    const pos = getEventPos(e);
+                    showContextMenu(pos.x, pos.y);
+                }, 500);
+            }
+        }, {passive: true});
+
+
         function handleMove(e) {
+            const pos = getEventPos(e);
+
+            if (longPressTimer) {
+                // 指が動いたら長押しキャンセル
+                if (Math.abs(pos.x - panStart.x) > 10 || Math.abs(pos.y - panStart.y) > 10) {
+                    clearTimeout(longPressTimer);
+                    longPressTimer = null;
+                }
+            }
+
+            if (isPanning) {
+                if (e.cancelable) e.preventDefault();
+                const dx = pos.x - panStart.x;
+                const dy = pos.y - panStart.y;
+                canvasContainer.scrollLeft = panStart.scrollLeft - dx;
+                canvasContainer.scrollTop = panStart.scrollTop - dy;
+                return;
+            }
+
             if (isDraggingNode || isConnecting) {
-                if (e.cancelable) e.preventDefault(); // スクロール防止
-                const pos = getEventPos(e);
+                if (e.cancelable) e.preventDefault(); 
                 
                 if (isDraggingNode && draggedNodeId) {
                     const canvasRect = canvas.getBoundingClientRect();
@@ -635,14 +993,25 @@
         }
 
         function handleUp(e) {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
+
+            if (isPanning) {
+                isPanning = false;
+                canvasContainer.classList.remove('grabbing-cursor');
+            }
+
             if (isDraggingNode && draggedNodeId) {
                 const nodeEl = document.getElementById(draggedNodeId);
                 if(nodeEl) nodeEl.classList.remove('dragging');
                 isDraggingNode = false;
                 draggedNodeId = null;
+                triggerAutoSave();
             }
+            
             if (isConnecting) {
-                // タッチデバイスでポート上で指を離した場合の処理
                 if (e.type === 'touchend' && e.changedTouches && e.changedTouches.length > 0) {
                     const touch = e.changedTouches[0];
                     const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
@@ -660,11 +1029,58 @@
 
         document.addEventListener('mousemove', handleMove);
         document.addEventListener('touchmove', handleMove, {passive: false});
-
         document.addEventListener('mouseup', handleUp);
         document.addEventListener('touchend', handleUp);
 
-        // --- チャットUI 処理 ---
+        // --- モーダル・設定関連 ---
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+            if (id === 'settings-modal') loadSettingsUI();
+            if (id === 'deploy-modal') {
+                document.getElementById('gh-token').value = localStorage.getItem('gh_token') || '';
+                document.getElementById('deploy-log').innerHTML = '';
+            }
+        }
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        function toggleApiKeyInput() {
+            const provider = document.querySelector('input[name="ai-provider"]:checked').value;
+            const container = document.getElementById('api-key-container');
+            if(provider === 'gemini') {
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        function loadSettingsUI() {
+            const provider = localStorage.getItem('ai_provider') || 'worker';
+            const key = localStorage.getItem('gemini_api_key') || '';
+            document.querySelector(`input[name="ai-provider"][value="${provider}"]`).checked = true;
+            document.getElementById('gemini-api-key').value = key;
+            toggleApiKeyInput();
+        }
+
+        function saveSettings() {
+            const provider = document.querySelector('input[name="ai-provider"]:checked').value;
+            const key = document.getElementById('gemini-api-key').value.trim();
+            localStorage.setItem('ai_provider', provider);
+            localStorage.setItem('gemini_api_key', key);
+            closeModal('settings-modal');
+            alert('設定を保存しました');
+        }
+
+        function getAIConfig() {
+            return {
+                provider: localStorage.getItem('ai_provider') || 'worker',
+                geminiKey: localStorage.getItem('gemini_api_key') || ''
+            };
+        }
+
+
+        // --- チャットUI処理 ---
         function addChatMessage(role, content, id = null) {
             const initMsg = chatMessages.querySelector('.text-center');
             if (initMsg) initMsg.remove();
@@ -707,33 +1123,40 @@
         }
 
         function testWorkflow() {
-            // モバイルの場合はテスト実行時に自動的にチャットタブへ遷移
-            if (window.innerWidth < 768) {
-                switchTab('chat');
-            }
-            chatInput.value = "こんにちは！テストメッセージです。";
+            if (window.innerWidth < 768) switchTab('chat');
+            chatInput.value = "この提案を承認して進めてください。";
             chatInput.focus();
         }
 
         // --- ワークフロー実行エンジン ---
         async function callAIAPI(prompt, input) {
+            const config = getAIConfig();
             const combinedPrompt = `[システム指示・目標]\n${prompt}\n\n[入力データ]\n${input}`;
             
             try {
-                const res = await fetch(WORKER_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: combinedPrompt })
-                });
-                
-                if(!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-                
-                const text = await res.text();
-                try {
-                    const data = JSON.parse(text);
-                    return data.response || data.text || data.choices?.[0]?.message?.content || text;
-                } catch(e) {
-                    return text; 
+                if (config.provider === 'gemini' && config.geminiKey) {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${config.geminiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: combinedPrompt }] }]
+                        })
+                    });
+                    if(!res.ok) throw new Error(`Gemini API Error: ${res.status}`);
+                    const data = await res.json();
+                    return data.candidates[0].content.parts[0].text;
+                } else {
+                    const res = await fetch(WORKER_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt: combinedPrompt })
+                    });
+                    if(!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                    const text = await res.text();
+                    try {
+                        const data = JSON.parse(text);
+                        return data.response || data.text || data.choices?.[0]?.message?.content || text;
+                    } catch(e) { return text; }
                 }
             } catch (error) {
                 console.error("AI API Error:", error);
@@ -781,6 +1204,23 @@
                         outputValue = await callAIAPI(prompt, value);
                         
                         removeChatMessage(loadingId);
+                    } else if (node.type === 'condition') {
+                        const conditionText = node.condition || '';
+                        const isMatch = outputValue.includes(conditionText);
+                        const branchMsg = isMatch 
+                            ? `<span class="text-emerald-600 font-bold">Yes</span> (${conditionText || '空'} を含む)` 
+                            : `<span class="text-red-600 font-bold">No</span> (${conditionText} を含まない)`;
+                        
+                        addChatMessage('bot', `<div class="p-2 bg-white rounded border border-orange-100 text-xs"><i data-lucide="split" class="w-3 h-3 inline-block mr-1"></i>分岐判定: ${branchMsg}</div>`);
+                        
+                        const outgoingEdges = edges.filter(e => e.from === nodeId && e.fromPort === (isMatch ? 'true' : 'false'));
+                        for (const edge of outgoingEdges) {
+                            highlightEdge(edge.id, true);
+                            await new Promise(r => setTimeout(r, 400)); 
+                            queue.push({ nodeId: edge.to, value: outputValue, fromEdgeId: edge.id });
+                        }
+                        continue; 
+                        
                     } else if (node.type === 'output') {
                         addChatMessage('bot', outputValue);
                         executedOutput = true;
@@ -790,11 +1230,13 @@
                     console.error(err);
                 }
 
-                const outgoingEdges = edges.filter(e => e.from === nodeId);
-                for (const edge of outgoingEdges) {
-                    highlightEdge(edge.id, true);
-                    await new Promise(r => setTimeout(r, 400)); 
-                    queue.push({ nodeId: edge.to, value: outputValue, fromEdgeId: edge.id });
+                if (node.type !== 'condition') {
+                    const outgoingEdges = edges.filter(e => e.from === nodeId);
+                    for (const edge of outgoingEdges) {
+                        highlightEdge(edge.id, true);
+                        await new Promise(r => setTimeout(r, 400)); 
+                        queue.push({ nodeId: edge.to, value: outputValue, fromEdgeId: edge.id });
+                    }
                 }
             }
 
@@ -803,9 +1245,224 @@
             }
         }
 
+        // --- デプロイ機能 ---
+        function addLog(msg, isErr=false) {
+            const logEl = document.getElementById('deploy-log');
+            const div = document.createElement('div');
+            div.className = `py-0.5 ${isErr ? 'text-red-400 font-bold' : ''}`;
+            div.innerText = `> ${msg}`;
+            logEl.appendChild(div);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function generateDeployHtml() {
+            const config = getAIConfig();
+            return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Agent</title>
+    <script src="https://cdn.tailwindcss.com"><\/script>
+    <script src="https://unpkg.com/lucide@latest"><\/script>
+    <style>
+        body, html { height: 100%; margin: 0; background-color: #f1f5f9; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    </style>
+</head>
+<body class="flex flex-col h-screen text-slate-800 font-sans">
+    <header class="bg-indigo-600 text-white p-4 shadow-md flex items-center justify-center shrink-0">
+        <h1 class="font-bold flex items-center gap-2"><i data-lucide="bot"></i>AI エージェント</h1>
+    </header>
+    <main class="flex-1 overflow-y-auto p-4 flex flex-col gap-4 bg-slate-50" id="chat-messages">
+        <div class="text-center text-slate-400 my-8 text-sm">システムが起動しました。<br>メッセージを入力してください。</div>
+    </main>
+    <div class="p-3 bg-white border-t border-slate-200 shrink-0">
+        <form id="chat-form" class="max-w-3xl mx-auto relative flex gap-2">
+            <input type="text" id="chat-input" class="flex-1 pl-4 pr-12 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm text-sm" placeholder="メッセージを入力...">
+            <button type="submit" class="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"><i data-lucide="send" class="w-4 h-4"></i></button>
+        </form>
+    </div>
+    <script>
+        lucide.createIcons();
+        const WORKFLOW_NODES = ${JSON.stringify(nodes)};
+        const WORKFLOW_EDGES = ${JSON.stringify(edges)};
+        const AI_CONFIG = ${JSON.stringify(config)};
+        const WORKER_URL = '${WORKER_URL}';
+
+        const chatMessages = document.getElementById('chat-messages');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+
+        function addMessage(role, content) {
+            const initMsg = chatMessages.querySelector('.text-center');
+            if(initMsg) initMsg.remove();
+            const div = document.createElement('div');
+            div.className = \`flex gap-3 max-w-[90%] \${role === 'user' ? 'ml-auto flex-row-reverse' : ''}\`;
+            div.innerHTML = \`<div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 \${role === 'user' ? 'bg-slate-200 text-slate-600' : 'bg-indigo-600 text-white'}"><i data-lucide="\${role === 'user' ? 'user' : 'bot'}" class="w-4 h-4"></i></div>
+                <div class="p-3 rounded-2xl text-sm \${role === 'user' ? 'bg-slate-200 text-slate-800 rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'}">\${content.replace(/\\n/g, '<br>')}</div>\`;
+            chatMessages.appendChild(div);
+            lucide.createIcons();
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        async function callAI(prompt, input) {
+            const combinedPrompt = \`[システム指示・目標]\\n\${prompt}\\n\\n[入力データ]\\n\${input}\`;
+            try {
+                if (AI_CONFIG.provider === 'gemini' && AI_CONFIG.geminiKey) {
+                    const res = await fetch(\`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=\${AI_CONFIG.geminiKey}\`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ parts: [{ text: combinedPrompt }] }] })
+                    });
+                    if(!res.ok) throw new Error('API Error');
+                    const data = await res.json();
+                    return data.candidates[0].content.parts[0].text;
+                } else {
+                    const res = await fetch(WORKER_URL, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt: combinedPrompt })
+                    });
+                    const text = await res.text();
+                    try { const data = JSON.parse(text); return data.response || data.text || text; } catch(e) { return text; }
+                }
+            } catch(e) { return "エラーが発生しました。"; }
+        }
+
+        async function execute(inputText) {
+            const startNodes = WORKFLOW_NODES.filter(n => n.type === 'input');
+            let queue = startNodes.map(n => ({ id: n.id, val: inputText }));
+            
+            while(queue.length > 0) {
+                const { id, val } = queue.shift();
+                const node = WORKFLOW_NODES.find(n => n.id === id);
+                if(!node) continue;
+                
+                let outVal = val;
+                if(node.type === 'ai') outVal = await callAI(node.prompt||'', val);
+                else if(node.type === 'condition') {
+                    const isMatch = outVal.includes(node.condition||'');
+                    const nextEdges = WORKFLOW_EDGES.filter(e => e.from === id && e.fromPort === (isMatch?'true':'false'));
+                    for(const e of nextEdges) queue.push({id: e.to, val: outVal});
+                    continue;
+                }
+                else if(node.type === 'output') addMessage('bot', outVal);
+
+                if(node.type !== 'condition') {
+                    const nextEdges = WORKFLOW_EDGES.filter(e => e.from === id);
+                    for(const e of nextEdges) queue.push({id: e.to, val: outVal});
+                }
+            }
+        }
+
+        chatForm.onsubmit = async (e) => {
+            e.preventDefault();
+            const text = chatInput.value.trim();
+            if(!text) return;
+            addMessage('user', text);
+            chatInput.value = '';
+            await execute(text);
+        };
+    <\/script>
+</body>
+</html>`;
+        }
+
+        async function doGitHubDeploy() {
+            const token = document.getElementById('gh-token').value.trim();
+            const repoName = document.getElementById('gh-repo').value.trim();
+            const isPrivate = document.getElementById('gh-private').checked;
+            const logEl = document.getElementById('deploy-log');
+            logEl.innerHTML = '';
+
+            if(!token || !repoName) return addLog("エラー: トークンとリポジトリ名を入力してください。", true);
+            localStorage.setItem('gh_token', token);
+
+            addLog("デプロイ準備中...");
+            const htmlContent = generateDeployHtml();
+            const encodedContent = btoa(unescape(encodeURIComponent(htmlContent)));
+
+            try {
+                // 1. Auth & Get User
+                let res = await fetch('https://api.github.com/user', {
+                    headers: { 'Authorization': `token ${token}` }
+                });
+                if(!res.ok) throw new Error("認証失敗。トークンを確認してください。");
+                const user = await res.json();
+                const owner = user.login;
+                addLog(`認証成功: ユーザー ${owner}`);
+
+                // 2. Check Repo
+                res = await fetch(`https://api.github.com/repos/${owner}/${repoName}`, {
+                    headers: { 'Authorization': `token ${token}` }
+                });
+                if(res.status === 404) {
+                    addLog(`リポジトリ [${repoName}] を作成中...`);
+                    res = await fetch(`https://api.github.com/user/repos`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: repoName, private: isPrivate, auto_init: true })
+                    });
+                    if(!res.ok) throw new Error("リポジトリ作成に失敗しました。");
+                    addLog("リポジトリを作成しました。");
+                    await new Promise(r => setTimeout(r, 2000));
+                } else if(!res.ok) {
+                    throw new Error("リポジトリ情報の取得に失敗しました。");
+                } else {
+                    addLog("既存のリポジトリを使用します。");
+                }
+
+                // 3. Get existing file sha
+                let sha = null;
+                res = await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/index.html`, {
+                    headers: { 'Authorization': `token ${token}` }
+                });
+                if(res.ok) {
+                    const fileData = await res.json();
+                    sha = fileData.sha;
+                }
+
+                // 4. Upload File
+                addLog("index.html をアップロード中...");
+                const bodyData = {
+                    message: "Deploy from AI Agent Builder",
+                    content: encodedContent
+                };
+                if(sha) bodyData.sha = sha;
+
+                res = await fetch(`https://api.github.com/repos/${owner}/${repoName}/contents/index.html`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(bodyData)
+                });
+                if(!res.ok) throw new Error("ファイルのアップロードに失敗しました。");
+                addLog("ファイルのアップロード完了。");
+
+                // 5. Enable Pages
+                addLog("GitHub Pagesの設定を確認中...");
+                await fetch(`https://api.github.com/repos/${owner}/${repoName}/pages`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github+json' },
+                    body: JSON.stringify({ source: { branch: 'main', path: '/' } })
+                });
+
+                addLog(`🎉 デプロイが完了しました！`);
+                addLog(`URL: https://${owner}.github.io/${repoName}/`);
+                addLog(`※反映に数分かかる場合があります。`);
+
+            } catch(err) {
+                addLog(err.message, true);
+            }
+        }
+
+
         // --- 初期化 ---
         window.addEventListener('DOMContentLoaded', () => {
-            loadInitialData();
+            const loaded = loadFromLocalStorage();
+            if (!loaded) {
+                loadInitialData();
+            }
             if (window.innerWidth < 768) {
                 switchTab('editor');
             }
